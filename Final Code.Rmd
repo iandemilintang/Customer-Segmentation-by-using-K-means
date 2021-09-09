@@ -1,0 +1,130 @@
+---
+title: "Data Science Final Project"
+author: "Sofian Syamsul"
+date: "30/8/2021"
+output: html_document
+---
+
+# Load Library
+```{r}
+library(dplyr)
+library(cluster)
+library(skimr)
+library(factoextra)
+```
+
+# Reading Data
+```{r}
+(data <- read.csv('data_ecommerce.csv'))
+```
+
+# Simple Data Checking
+```{r}
+# Rows & Columns Checking
+glimpse(data)
+```
+```{r}
+# Summary Statistic Checking
+skim(data)
+```
+
+# Exploratory Data Analysis
+```{r}
+# 1.Checking and Drop Customer ID NA Valeus
+sum(is.na(data$CustomerID))
+data <- na.omit(data)
+```
+```{r}
+# 2. Changing to datetime format
+data$InvoiceDate=as.POSIXct(data$InvoiceDate,
+                            format="%m/%d/%Y %H:%M",
+                            tz=Sys.timezone())
+```
+```{r}
+# 3. Filtering out canceled orders
+data <- data %>%
+  filter(Quantity > 0)
+```
+```{r}
+# 4. Removing incomplete data
+data <- data %>%
+  filter(InvoiceDate < "2011-12-01")
+```
+```{r}
+# 5. Calculate the sales column
+data <- data %>%
+  mutate(Sales=Quantity*UnitPrice)
+```
+```{r}
+# 6. Transform data
+customer_data <- data %>%
+  group_by(CustomerID) %>%
+  summarize(TotalSales=sum(Sales),
+            OrderCount=length(unique(InvoiceDate))) %>%
+  mutate(AvgOrderValue=TotalSales/OrderCount)
+```
+```{r}
+# Data Customer
+glimpse(customer_data)
+```
+
+# Normalizing Data
+```{r}
+## rank the data, values from 1 to 4298 (total number of records)
+rank_data <- customer_data %>%
+  mutate(TotalSales=rank(TotalSales), OrderCount=rank(OrderCount, 
+         ties.method = "first"), AvgOrderValue=rank(AvgOrderValue))
+```
+```{r}
+## normalizing data
+normalized_data <- rank_data %>%
+  mutate(TotalSales=scale(TotalSales), OrderCount=scale(OrderCount), 
+         AvgOrderValue=scale(AvgOrderValue))
+```
+```{r}
+##look at the summary of the normalized data
+summary(normalized_data)
+sapply(normalized_data, sd)
+```
+
+# Find the best number of clusters
+```{r}
+# Elbow Method
+fviz_nbclust(normalized_data, kmeans, method = 'wss')
+```
+```{r}
+# Silhoutte Method
+fviz_nbclust(normalized_data, kmeans, method = 'silhouette')
+```
+
+# Clustering k = 4
+```{r}
+## k-means clustering
+cluster <- kmeans(normalized_data[c("TotalSales", "OrderCount",
+                                    "AvgOrderValue")], 4)
+## cluster labels
+normalized_data$Cluster <- cluster$cluster
+
+## visualizing clusters
+fviz_cluster(cluster, data = normalized_data)
+```
+# Checking Clusters for Business Recommendation
+```{r}
+cluster$centers
+```
+
+```{r}
+library(ggplot2)
+```
+
+
+```{r}
+## optional visualizing clusters
+options(repr.plot.width = 16, repr.plot.height = 7)
+ggplot(normalized_data, aes(x=AvgOrderValue, y=OrderCount, color=Cluster)) +
+  geom_point() + theme(legend.position = "bottom", legend.text=element_text(size=25),
+                      axis.title = element_text(size = 20))
+```
+
+
+
